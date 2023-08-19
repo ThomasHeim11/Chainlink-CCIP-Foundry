@@ -11,7 +11,10 @@ contract CCIPTokenSender is OwnerIsCreator {
     IRouterClient router;
     LinkTokenInterface linkToken;
     
+    mapping(uint64 => bool) public whitelistedChains;
+    
     error NotEnoughBalance(uint256 currentBalance, uint256 calculatedFees); 
+    error DestinationChainNotWhitelisted(uint64 destinationChainSelector);
     
     event TokensTransferred(
         bytes32 indexed messageId, // The unique ID of the message.
@@ -22,10 +25,28 @@ contract CCIPTokenSender is OwnerIsCreator {
         address feeToken, // the token address used to pay CCIP fees.
         uint256 fees // The fees paid for sending the message.
     );
+    
+    modifier onlyWhitelistedChain(uint64 _destinationChainSelector) {
+        if (!whitelistedChains[_destinationChainSelector])
+            revert DestinationChainNotWhitelisted(_destinationChainSelector);
+        _;
+    }
 
     constructor(address _router, address _link) {
         router = IRouterClient(_router);
         linkToken = LinkTokenInterface(_link);
+    }
+   
+    function whitelistChain(
+        uint64 _destinationChainSelector
+    ) external onlyOwner {
+        whitelistedChains[_destinationChainSelector] = true;
+    }
+
+    function denylistChain(
+        uint64 _destinationChainSelector
+    ) external onlyOwner {
+        whitelistedChains[_destinationChainSelector] = false;
     }
     
     function transferTokens(
@@ -35,6 +56,8 @@ contract CCIPTokenSender is OwnerIsCreator {
         uint256 _amount
     ) 
         external
+        onlyOwner
+        onlyWhitelistedChain(_destinationChainSelector)
         returns (bytes32 messageId) 
     {
         Client.EVMTokenAmount[]
